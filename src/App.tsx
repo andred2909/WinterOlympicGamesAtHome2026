@@ -80,7 +80,8 @@ const BONUS_RULES: BonusRule[] = [
 ];
 
 const STORAGE_KEY    = "mario_sonic_torneo_v3";
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+const ADMIN_PASSWORD = "Olympics!!21022026";
+//const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
 
 const INITIAL_STATE: AppState = {
   players: [],
