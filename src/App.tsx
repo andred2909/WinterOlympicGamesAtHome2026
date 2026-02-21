@@ -23,6 +23,7 @@ interface BonusRule {
   pts: number;
   desc: string;
   when: string;
+  hidden?: boolean;
 }
 
 type Results = Record<string, Record<number, number>>;
@@ -70,18 +71,23 @@ const MEDAL_POINTS: Record<number, number> = { 1: 5, 2: 3, 3: 2, 4: 1 };
 const MEDAL_EMOJI:  Record<number, string>  = { 1: "🥇", 2: "🥈", 3: "🥉", 4: "4°", 5: "5°", 6: "6°", 7: "7°", 8: "8°" };
 
 const BONUS_RULES: BonusRule[] = [
-  { id: "simpatia",   name: "🎭 Premio Simpatia",      pts: 3, desc: "Votato da tutti a fine serata. Chi ha fatto ridere di più?",                   when: "Fine serata"    },
-  { id: "fedele",     name: "🏳️ Fedele alla Nazione",  pts: 1, desc: "Per evento: il tuo personaggio ha un legame tematico con la nazione scelta.",  when: "Ogni evento"    },
-  { id: "ironman",    name: "💀 Iron Man",              pts: 2, desc: "Rivelato a metà serata: non sei mai arrivato ultimo fino a quel momento.",     when: "Metà serata"    },
-  { id: "specialist", name: "🎯 Specialista",           pts: 2, desc: "Rivelato a metà serata: il punteggio più alto in un singolo evento.",          when: "Metà serata"    },
-  { id: "ghiaccio",   name: "🧊 Cuore di Ghiaccio",    pts: 1, desc: "Rivelato a metà serata: non hai mai esultato/imprecato ad alta voce.",         when: "Metà serata"    },
-  { id: "fairplay",   name: "🤝 Fair Play",             pts: 1, desc: "Assegnato dagli altri giocatori a chi ha perso con più stile.",                when: "Fine serata"    },
-  { id: "momento",    name: "⚡ Momento Olimpico",      pts: 1, desc: "Assegnabile dal MC in tempo reale: la giocata/reazione più memorabile.",       when: "In tempo reale" },
+  // sempre visibili
+  { id: "simpatia",   name: "Simpatia",      pts: 3, desc: "Votato da tutti a fine serata. Chi ha fatto ridere di piu?",                              when: "Fine serata"    },
+  { id: "momento",    name: "Momento Olimpico", pts: 1, desc: "MC lo assegna in tempo reale per la giocata o reazione piu epica dell evento.",        when: "In tempo reale" },
+  { id: "hype",       name: "Hype Man",       pts: 1, desc: "Hai esultato cosi tanto da far alzare tutti in piedi almeno una volta.",                  when: "Fine serata"    },
+  { id: "cibo",       name: "Atleta Rifornito", pts: 1, desc: "Hai mangiato o bevuto durante la tua gara senza smettere di giocare.",                  when: "In tempo reale" },
+  { id: "fairplay",   name: "Fair Play",      pts: 1, desc: "Assegnato dagli altri a chi ha perso con piu stile e senza lamentarsi.",                  when: "Fine serata"    },
+  { id: "nemesi",     name: "Nemesi Giurata", pts: 2, desc: "Hai battuto lo stesso giocatore in almeno 3 eventi diversi. Vendetta servita fredda.",    when: "Fine serata"    },
+  { id: "drink",      name: "Doppio Carburante", pts: 1, desc: "Hai finito il tuo drink prima che finisse un evento. Il MC deve confermarlo.",         when: "In tempo reale" },
+  { id: "telecron",   name: "Telecronista",   pts: 1, desc: "Hai commentato la tua gara ad alta voce per tutto l evento senza fermarti.",              when: "In tempo reale" },
+  // nascosti fino al 3 evento
+  { id: "ironman",    name: "Iron Man",        pts: 2, desc: "Non sei mai arrivato ultimo nei primi 3 eventi. Sopravvissuto!",                          when: "Dopo 3 eventi", hidden: true },
+  { id: "specialist", name: "Specialista",    pts: 2, desc: "Hai il punteggio piu alto in un singolo evento tra tutti i giocatori.",                   when: "Dopo 3 eventi", hidden: true },
+  { id: "ghiaccio",   name: "Cuore di Ghiaccio", pts: 1, desc: "Non hai mai perso la calma nei primi 3 eventi. Niente urla, niente bestemmie.",        when: "Dopo 3 eventi", hidden: true },
 ];
 
 const STORAGE_KEY    = "mario_sonic_torneo_v3";
-const ADMIN_PASSWORD = "Olympics!!21022026";
-//const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD as string;
 
 const INITIAL_STATE: AppState = {
   players: [],
@@ -641,27 +647,41 @@ function EventsTable({ state }: { state: AppState }) {
 
 // ─── RULES ─────────────────────────────────────────────────────────────────────
 
-function Rules() {
+function Rules({ state }: { state: AppState }) {
+  const completedEvents = Object.keys(state.results).filter(
+    eid => Object.keys(state.results[eid] ?? {}).length > 0
+  ).length;
+  const hiddenUnlocked = completedEvents >= 3;
+
   const generalRules: [string, string][] = [
-    ["👤 Personaggio fisso", "Ogni giocatore sceglie UN solo personaggio e lo usa per tutta la serata. Mii non validi."],
-    ["🏳️ Nazione",           "Ogni giocatore rappresenta una nazione. Può dare diritto al bonus Fedele alla Nazione."],
-    ["🎮 Controller",        "2-4 controller a rotazione. Il MC gestisce i turni."],
-    ["🏅 Medaglie in gioco", "Nei giochi Wii le medaglie contano: Oro = 5pt, Argento = 3pt, Bronzo = 2pt, 4° = 1pt."],
-    ["🏂 Dream Snowboard",   "L'evento Dream Snowboard Cross vale PUNTI DOPPI su tutti i piazzamenti."],
-    ["🎭 MC",                "Il Mastro delle Cerimonie non gioca ufficialmente ma commenta, gestisce i turni e assegna bonus spot."],
+    ["Personaggio fisso", "Ogni giocatore sceglie UN solo personaggio e lo usa per tutta la serata. Mii non validi."],
+    ["Controller",        "2-4 controller a rotazione. Il MC gestisce i turni."],
+    ["Medaglie in gioco", "Nei giochi Wii: Oro = 5pt, Argento = 3pt, Bronzo = 2pt, 4 posto = 1pt."],
+    ["Dream Snowboard",   "L evento Dream Snowboard Cross vale PUNTI DOPPI su tutti i piazzamenti."],
+    ["MC",               "Il Mastro delle Cerimonie commenta, gestisce i turni e assegna bonus spot."],
   ];
 
-  const schedule: [string, string, string][] = [
-    ["21:00", "Cerimonia d'apertura",          "Scelta personaggio + nazione + drink di benvenuto"],
-    ["21:15", "Evento 1 — Salto con gli Sci",  "Riscaldamento: facile da capire, grande spettacolo"],
-    ["21:35", "Evento 2 — Bob",                ""],
-    ["21:55", "Evento 3 — Curling",            "Pausa — classifica intermedia + snack"],
-    ["22:15", "⚡ Rivelazione bonus segreti",  "Iron Man, Specialista, Cuore di Ghiaccio vengono svelati!"],
-    ["22:20", "Evento 4 — Pattinaggio",        ""],
-    ["22:40", "Evento 5 — Hockey su Ghiaccio", ""],
-    ["23:00", "🏂 FINALE — Dream Snowboard",   "PUNTI DOPPI! L'evento più importante della serata"],
-    ["23:20", "🏆 Cerimonia di chiusura",       "Classifica finale + podio + premi"],
+  const eventSchedule = [
+    { icon: "🎿", name: "Salto con gli Sci",    note: "Riscaldamento — facile da capire, grande spettacolo" },
+    { icon: "🛷", name: "Bob",                   note: "" },
+    { icon: "🥌", name: "Curling",               note: "Pausa snack + rivelazione bonus segreti dopo questo evento! ⚡" },
+    { icon: "🩰", name: "Pattinaggio di Figura", note: "" },
+    { icon: "🏒", name: "Hockey su Ghiaccio",   note: "" },
+    { icon: "🏂", name: "Dream Snowboard Cross", note: "FINALE — punti doppi! L evento piu importante della serata", double: true },
   ];
+
+  const bonusEmoji: Record<string, string> = {
+    simpatia: "🎭", momento: "⚡", hype: "📣", cibo: "🍕",
+    fairplay: "🤝", nemesi: "😤", drink: "🍺", telecron: "🎙️",
+    ironman: "💀", specialist: "🎯", ghiaccio: "🧊",
+  };
+
+  const bonusNamePretty: Record<string, string> = {
+    simpatia: "Premio Simpatia", momento: "Momento Olimpico", hype: "Hype Man",
+    cibo: "Atleta Rifornito", fairplay: "Fair Play", nemesi: "Nemesi Giurata",
+    drink: "Doppio Carburante", telecron: "Telecronista",
+    ironman: "Iron Man", specialist: "Specialista", ghiaccio: "Cuore di Ghiaccio",
+  };
 
   const pts: [string, string, string][] = [
     ["🥇 1°", "5 pt",  "#ffd700"],
@@ -671,8 +691,12 @@ function Rules() {
     ["5°+",   "0 pt",  "#444"   ],
   ];
 
+  const visibleBonus = BONUS_RULES.filter(b => !b.hidden);
+  const hiddenBonus  = BONUS_RULES.filter(b => b.hidden);
+
   return (
     <div>
+      {/* Regole generali */}
       <div style={G.panel}>
         <div style={G.sectionTitle}>📜 Regole Generali</div>
         {generalRules.map(([title, desc]) => (
@@ -683,6 +707,28 @@ function Rules() {
         ))}
       </div>
 
+      {/* Scaletta eventi */}
+      <div style={G.panel}>
+        <div style={G.sectionTitle}>🗓️ Scaletta Eventi</div>
+        {eventSchedule.map((ev, i) => (
+          <div key={ev.name} style={{
+            display: "flex", alignItems: "center", gap: 14, padding: "12px 0",
+            borderBottom: i < eventSchedule.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+          }}>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: "#00cfff", minWidth: 28, textAlign: "center" }}>{i + 1}</div>
+            <div style={{ fontSize: 22, minWidth: 28 }}>{ev.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                {ev.name}
+                {ev.double && <span style={{ fontSize: 10, background: "rgba(255,215,0,0.2)", color: "#ffd700", borderRadius: 6, padding: "2px 8px", fontWeight: 800 }}>x2</span>}
+              </div>
+              {ev.note && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>{ev.note}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Punti */}
       <div style={G.panel}>
         <div style={G.sectionTitle}>🏅 Punti per Piazzamento</div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -694,13 +740,14 @@ function Rules() {
           ))}
         </div>
         <div style={{ marginTop: 14, padding: "12px 16px", background: "rgba(255,215,0,0.06)", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 12, fontSize: 13, color: "#ffd700" }}>
-          🏂 <strong>Dream Snowboard Cross:</strong> tutti i punti vengono raddoppiati (🥇 = 10pt, 🥈 = 6pt, 🥉 = 4pt, 4° = 2pt)
+          🏂 <strong>Dream Snowboard Cross:</strong> punti raddoppiati (🥇=10pt, 🥈=6pt, 🥉=4pt, 4°=2pt)
         </div>
       </div>
 
+      {/* Bonus visibili */}
       <div style={G.panel}>
         <div style={G.sectionTitle}>⭐ Bonus Speciali</div>
-        {BONUS_RULES.map(b => (
+        {visibleBonus.map(b => (
           <div key={b.id} style={{
             display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 10,
             padding: "14px 16px", borderRadius: 12,
@@ -713,7 +760,7 @@ function Rules() {
               fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: "#00cfff",
             }}>+{b.pts}</div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{b.name}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{bonusEmoji[b.id]} {bonusNamePretty[b.id]}</div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{b.desc}</div>
               <div style={{ fontSize: 11, color: "#ffd700", fontWeight: 600, letterSpacing: 1 }}>🕐 {b.when}</div>
             </div>
@@ -721,17 +768,45 @@ function Rules() {
         ))}
       </div>
 
-      <div style={G.panel}>
-        <div style={G.sectionTitle}>🗓️ Scaletta Serata</div>
-        {schedule.map(([time, title, sub], i) => (
-          <div key={time} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: i < schedule.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17, color: "#00cfff", minWidth: 58 }}>{time}</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{title}</div>
-              {sub && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>{sub}</div>}
-            </div>
+      {/* Bonus segreti */}
+      <div style={{
+        ...G.panel,
+        border: hiddenUnlocked ? "1px solid rgba(0,255,136,0.3)" : "1px solid rgba(255,215,0,0.25)",
+        background: hiddenUnlocked ? "rgba(0,255,136,0.03)" : "rgba(255,215,0,0.02)",
+      }}>
+        <div style={{ ...G.sectionTitle, color: hiddenUnlocked ? "#00ff88" : "#ffd700" }}>
+          {hiddenUnlocked ? "🔓 Bonus Segreti — Svelati!" : "🔒 Bonus Segreti"}
+          {!hiddenUnlocked && (
+            <span style={{ fontSize: 11, fontFamily: "inherit", fontWeight: 400, color: "rgba(255,255,255,0.35)", marginLeft: 8 }}>
+              si sbloccano dopo il 3° evento ({completedEvents}/3)
+            </span>
+          )}
+        </div>
+        {!hiddenUnlocked ? (
+          <div style={{ textAlign: "center", padding: "24px 0", color: "rgba(255,255,255,0.2)", fontSize: 13 }}>
+            🤫 Questi bonus sono segreti — verranno rivelati dopo il Curling!
           </div>
-        ))}
+        ) : (
+          hiddenBonus.map(b => (
+            <div key={b.id} style={{
+              display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 10,
+              padding: "14px 16px", borderRadius: 12,
+              background: "rgba(0,255,136,0.05)", border: "1px solid rgba(0,255,136,0.15)",
+            }}>
+              <div style={{
+                minWidth: 42, height: 42, borderRadius: 12,
+                background: "rgba(0,255,136,0.15)", border: "1px solid rgba(0,255,136,0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: "#00ff88",
+              }}>+{b.pts}</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{bonusEmoji[b.id]} {bonusNamePretty[b.id]}</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{b.desc}</div>
+                <div style={{ fontSize: 11, color: "#00ff88", fontWeight: 600, letterSpacing: 1 }}>🕐 {b.when}</div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -792,9 +867,9 @@ function AdminLock({ onUnlock }: { onUnlock: () => void }) {
       <button onClick={attempt} style={{ ...G.btn("#00cfff"), width: "100%", fontSize: 15, padding: "13px" }}>
         {unlocked ? "✓ Accesso concesso!" : "🔑 Entra"}
       </button>
-      {/* <div style={{ marginTop: 16, fontSize: 11, color: "rgba(255,255,255,0.15)", letterSpacing: 1 }}>
+      <div style={{ marginTop: 16, fontSize: 11, color: "rgba(255,255,255,0.15)", letterSpacing: 1 }}>
         Password di default: <em>wii2026</em>
-      </div> */}
+      </div>
       <style>{`
         @keyframes shake {
           0%,100%{transform:translateX(0)} 15%{transform:translateX(-8px)}
@@ -900,7 +975,7 @@ export default function App() {
         <div style={{ marginTop: 24 }}>
           {tab === "leaderboard" && <Leaderboard state={state} />}
           {tab === "events"      && <EventsTable state={state} />}
-          {tab === "rules"       && <Rules />}
+          {tab === "rules"       && <Rules state={state} />}
           {tab === "admin"       && (
             adminUnlocked
               ? <AdminTab state={state} setState={setState} />
