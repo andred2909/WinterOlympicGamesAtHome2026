@@ -111,7 +111,6 @@ Questo progetto è nato in una serata e cresciuto iterativamente. Alcune cose in
 
 > *Classifica in tempo reale con podio e progress bar*
 
-![App Screenshot]
 <img width="1911" height="876" alt="image" src="https://github.com/user-attachments/assets/dda443fa-42ac-47fc-b5ff-de5d06dab6be" />
 
 
